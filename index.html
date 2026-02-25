@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvas</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Helvetica+Neue:wght@100&display=swap');
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 100;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    cursor: default;
+    user-select: none;
+  }
+
+  #canvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  svg#lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  svg#lines path {
+    fill: none;
+    stroke: #000;
+    stroke-width: 0.75;
+  }
+
+  svg#lines circle.endpoint {
+    fill: #000;
+    r: 2.5;
+  }
+
+  .box {
+    position: absolute;
+    border: 0.75px solid #000;
+    background: #fff;
+    min-width: 60px;
+    min-height: 36px;
+    z-index: 1;
+    cursor: grab;
+  }
+
+  .box.dragging {
+    cursor: grabbing;
+    z-index: 10;
+  }
+
+  .box .content {
+    width: 100%;
+    height: 100%;
+    padding: 10px 12px;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 100;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #000;
+    border: none;
+    outline: none;
+    resize: none;
+    background: transparent;
+    overflow: auto;
+    cursor: text;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  /* Resize handles */
+  .box .handle {
+    position: absolute;
+    z-index: 2;
+  }
+
+  .box .handle-n  { top: -3px; left: 4px; right: 4px; height: 6px; cursor: n-resize; }
+  .box .handle-s  { bottom: -3px; left: 4px; right: 4px; height: 6px; cursor: s-resize; }
+  .box .handle-e  { right: -3px; top: 4px; bottom: 4px; width: 6px; cursor: e-resize; }
+  .box .handle-w  { left: -3px; top: 4px; bottom: 4px; width: 6px; cursor: w-resize; }
+  .box .handle-ne { top: -3px; right: -3px; width: 8px; height: 8px; cursor: ne-resize; }
+  .box .handle-nw { top: -3px; left: -3px; width: 8px; height: 8px; cursor: nw-resize; }
+  .box .handle-se { bottom: -3px; right: -3px; width: 8px; height: 8px; cursor: se-resize; }
+  .box .handle-sw { bottom: -3px; left: -3px; width: 8px; height: 8px; cursor: sw-resize; }
+
+  /* Edge anchors for connecting lines */
+  .box .edge-anchor {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: transparent;
+    border: 0.75px solid transparent;
+    z-index: 3;
+    display: none;
+    transition: background 0.15s, border-color 0.15s;
+    cursor: crosshair;
+  }
+
+  .box .edge-anchor:hover {
+    background: #000;
+    border-color: #000;
+  }
+
+  body.connect-mode .box .edge-anchor {
+    display: block;
+    border-color: #999;
+  }
+
+  .box .edge-anchor.anchor-n { top: -5px; left: 50%; transform: translateX(-50%); }
+  .box .edge-anchor.anchor-s { bottom: -5px; left: 50%; transform: translateX(-50%); }
+  .box .edge-anchor.anchor-e { right: -5px; top: 50%; transform: translateY(-50%); }
+  .box .edge-anchor.anchor-w { left: -5px; top: 50%; transform: translateY(-50%); }
+
+  .box .edge-anchor.active {
+    background: #000;
+    border-color: #000;
+  }
+
+  #toolbar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    z-index: 100;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: #999;
+  }
+
+  #toolbar button {
+    background: #fff;
+    border: 0.75px solid #ccc;
+    padding: 6px 14px;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 100;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    color: #000;
+    transition: border-color 0.15s;
+  }
+
+  #toolbar button:hover {
+    border-color: #000;
+  }
+
+  #mode-indicator {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #999;
+    z-index: 100;
+    transition: color 0.15s;
+  }
+
+  #mode-indicator.active {
+    color: #000;
+  }
+
+  svg#preview-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  svg#preview-line path {
+    fill: none;
+    stroke: #999;
+    stroke-width: 0.75;
+    stroke-dasharray: 4 3;
+  }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <svg id="lines"></svg>
+  <svg id="preview-line"></svg>
+</div>
+
+<div id="toolbar">
+  <button id="add-box">+ box</button>
+  <span>shift+k &nbsp;connect</span>
+</div>
+
+<div id="mode-indicator">edit</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('canvas');
+  const linesSVG = document.getElementById('lines');
+  const previewSVG = document.getElementById('preview-line');
+  const modeIndicator = document.getElementById('mode-indicator');
+  const addBoxBtn = document.getElementById('add-box');
+
+  let boxes = [];
+  let connections = [];
+  let nextBoxId = 0;
+  let connectMode = false;
+  let pendingAnchor = null; // { boxId, side }
+
+  // ── Box creation ──────────────────────────────────────────────────
+
+  function createBox(x, y, w = 160, h = 100) {
+    const id = nextBoxId++;
+    const el = document.createElement('div');
+    el.className = 'box';
+    el.dataset.id = id;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = w + 'px';
+    el.style.height = h + 'px';
+
+    // Editable content
+    const content = document.createElement('div');
+    content.className = 'content';
+    content.contentEditable = true;
+    content.spellcheck = false;
+    el.appendChild(content);
+
+    // Resize handles
+    ['n','s','e','w','ne','nw','se','sw'].forEach(dir => {
+      const handle = document.createElement('div');
+      handle.className = `handle handle-${dir}`;
+      handle.dataset.dir = dir;
+      el.appendChild(handle);
+    });
+
+    // Edge anchors for connections
+    ['n','s','e','w'].forEach(side => {
+      const anchor = document.createElement('div');
+      anchor.className = `edge-anchor anchor-${side}`;
+      anchor.dataset.side = side;
+      anchor.dataset.boxId = id;
+      anchor.addEventListener('mousedown', onAnchorMouseDown);
+      el.appendChild(anchor);
+    });
+
+    canvas.appendChild(el);
+
+    const box = { id, el, x, y, w, h };
+    boxes.push(box);
+
+    setupDragAndResize(box);
+    return box;
+  }
+
+  // ── Dragging & resizing ───────────────────────────────────────────
+
+  function setupDragAndResize(box) {
+    const el = box.el;
+    let dragging = false;
+    let resizing = false;
+    let resizeDir = '';
+    let startX, startY, origX, origY, origW, origH;
+
+    el.addEventListener('mousedown', (e) => {
+      // Don't drag when clicking content or anchors
+      if (e.target.classList.contains('content') || e.target.classList.contains('edge-anchor')) return;
+
+      // Check for resize handle
+      if (e.target.classList.contains('handle')) {
+        resizing = true;
+        resizeDir = e.target.dataset.dir;
+        startX = e.clientX;
+        startY = e.clientY;
+        origX = box.x;
+        origY = box.y;
+        origW = box.w;
+        origH = box.h;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (connectMode) return;
+
+      // Start drag
+      dragging = true;
+      el.classList.add('dragging');
+      startX = e.clientX;
+      startY = e.clientY;
+      origX = box.x;
+      origY = box.y;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (dragging) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        box.x = origX + dx;
+        box.y = origY + dy;
+        el.style.left = box.x + 'px';
+        el.style.top = box.y + 'px';
+        redrawConnections();
+      }
+
+      if (resizing) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const minW = 60;
+        const minH = 36;
+
+        if (resizeDir.includes('e')) {
+          box.w = Math.max(minW, origW + dx);
+        }
+        if (resizeDir.includes('w')) {
+          const newW = Math.max(minW, origW - dx);
+          box.x = origX + origW - newW;
+          box.w = newW;
+        }
+        if (resizeDir.includes('s')) {
+          box.h = Math.max(minH, origH + dy);
+        }
+        if (resizeDir.includes('n')) {
+          const newH = Math.max(minH, origH - dy);
+          box.y = origY + origH - newH;
+          box.h = newH;
+        }
+
+        el.style.left = box.x + 'px';
+        el.style.top = box.y + 'px';
+        el.style.width = box.w + 'px';
+        el.style.height = box.h + 'px';
+        redrawConnections();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (dragging) {
+        dragging = false;
+        el.classList.remove('dragging');
+      }
+      resizing = false;
+    });
+  }
+
+  // ── Connect mode (Shift+K) ───────────────────────────────────────
+
+  function enterConnectMode() {
+    connectMode = true;
+    pendingAnchor = null;
+    document.body.classList.add('connect-mode');
+    modeIndicator.textContent = 'connect';
+    modeIndicator.classList.add('active');
+    clearAnchorsActive();
+  }
+
+  function exitConnectMode() {
+    connectMode = false;
+    pendingAnchor = null;
+    document.body.classList.remove('connect-mode');
+    modeIndicator.textContent = 'edit';
+    modeIndicator.classList.remove('active');
+    clearAnchorsActive();
+    previewSVG.innerHTML = '';
+  }
+
+  function clearAnchorsActive() {
+    document.querySelectorAll('.edge-anchor.active').forEach(a => a.classList.remove('active'));
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'K' && e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      // Don't trigger if typing in a content area
+      if (document.activeElement && document.activeElement.classList.contains('content')) return;
+      e.preventDefault();
+      if (connectMode) {
+        exitConnectMode();
+      } else {
+        enterConnectMode();
+      }
+    }
+    if (e.key === 'Escape') {
+      if (connectMode) exitConnectMode();
+    }
+  });
+
+  function onAnchorMouseDown(e) {
+    if (!connectMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const boxId = parseInt(e.target.dataset.boxId);
+    const side = e.target.dataset.side;
+
+    if (!pendingAnchor) {
+      pendingAnchor = { boxId, side };
+      e.target.classList.add('active');
+      startPreviewLine(boxId, side);
+    } else {
+      if (pendingAnchor.boxId === boxId && pendingAnchor.side === side) {
+        // Clicked same anchor, deselect
+        pendingAnchor = null;
+        clearAnchorsActive();
+        previewSVG.innerHTML = '';
+        return;
+      }
+      // Create connection
+      addConnection(pendingAnchor.boxId, pendingAnchor.side, boxId, side);
+      pendingAnchor = null;
+      clearAnchorsActive();
+      previewSVG.innerHTML = '';
+    }
+  }
+
+  // ── Preview line while connecting ─────────────────────────────────
+
+  function startPreviewLine(fromBoxId, fromSide) {
+    const onMove = (e) => {
+      if (!connectMode || !pendingAnchor) {
+        document.removeEventListener('mousemove', onMove);
+        previewSVG.innerHTML = '';
+        return;
+      }
+      const from = getAnchorPoint(fromBoxId, fromSide);
+      const to = { x: e.clientX, y: e.clientY };
+      const dirFrom = sideToDir(fromSide);
+      const path = buildOrthogonalPath(from, to, dirFrom, null);
+      previewSVG.innerHTML = `<path d="${path}"/>`;
+    };
+    document.addEventListener('mousemove', onMove);
+  }
+
+  // ── Connections ───────────────────────────────────────────────────
+
+  function addConnection(fromBoxId, fromSide, toBoxId, toSide) {
+    // Prevent duplicate connections
+    const dup = connections.find(c =>
+      (c.fromBoxId === fromBoxId && c.fromSide === fromSide && c.toBoxId === toBoxId && c.toSide === toSide) ||
+      (c.fromBoxId === toBoxId && c.fromSide === toSide && c.toBoxId === fromBoxId && c.toSide === fromSide)
+    );
+    if (dup) return;
+
+    connections.push({ fromBoxId, fromSide, toBoxId, toSide });
+    redrawConnections();
+  }
+
+  function getAnchorPoint(boxId, side) {
+    const box = boxes.find(b => b.id === boxId);
+    if (!box) return { x: 0, y: 0 };
+    switch (side) {
+      case 'n': return { x: box.x + box.w / 2, y: box.y };
+      case 's': return { x: box.x + box.w / 2, y: box.y + box.h };
+      case 'e': return { x: box.x + box.w, y: box.y + box.h / 2 };
+      case 'w': return { x: box.x, y: box.y + box.h / 2 };
+    }
+  }
+
+  function sideToDir(side) {
+    switch (side) {
+      case 'n': return { x: 0, y: -1 };
+      case 's': return { x: 0, y: 1 };
+      case 'e': return { x: 1, y: 0 };
+      case 'w': return { x: -1, y: 0 };
+    }
+  }
+
+  // Manhattan routing: builds a path that only goes horizontally/vertically
+  function buildOrthogonalPath(from, to, dirFrom, dirTo) {
+    const GAP = 24;
+    const pts = [from];
+
+    // Compute exit points (a short stub away from the box edge)
+    const exitFrom = {
+      x: from.x + (dirFrom ? dirFrom.x * GAP : 0),
+      y: from.y + (dirFrom ? dirFrom.y * GAP : 0)
+    };
+    pts.push(exitFrom);
+
+    let entryTo = to;
+    if (dirTo) {
+      entryTo = {
+        x: to.x + dirTo.x * GAP,
+        y: to.y + dirTo.y * GAP
+      };
+    }
+
+    // Route between exitFrom and entryTo with at most 2 bends
+    const a = exitFrom;
+    const b = entryTo;
+
+    const fromHoriz = dirFrom && dirFrom.x !== 0;
+    const toHoriz = dirTo && dirTo.x !== 0;
+
+    if (dirFrom && dirTo) {
+      if (fromHoriz && toHoriz) {
+        // Both horizontal - route via midpoint Y
+        if (Math.abs(a.y - b.y) < 1) {
+          pts.push(b);
+        } else {
+          const midX = (a.x + b.x) / 2;
+          pts.push({ x: midX, y: a.y });
+          pts.push({ x: midX, y: b.y });
+          pts.push(b);
+        }
+      } else if (!fromHoriz && !toHoriz) {
+        // Both vertical - route via midpoint X
+        if (Math.abs(a.x - b.x) < 1) {
+          pts.push(b);
+        } else {
+          const midY = (a.y + b.y) / 2;
+          pts.push({ x: a.x, y: midY });
+          pts.push({ x: b.x, y: midY });
+          pts.push(b);
+        }
+      } else if (fromHoriz && !toHoriz) {
+        // From horizontal, to vertical
+        pts.push({ x: b.x, y: a.y });
+        pts.push(b);
+      } else {
+        // From vertical, to horizontal
+        pts.push({ x: a.x, y: b.y });
+        pts.push(b);
+      }
+    } else {
+      // Fallback: simple L-bend
+      if (dirFrom && dirFrom.x !== 0) {
+        pts.push({ x: b.x, y: a.y });
+      } else {
+        pts.push({ x: a.x, y: b.y });
+      }
+      pts.push(b);
+    }
+
+    if (dirTo) {
+      pts.push(to);
+    }
+
+    // Build SVG path
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      d += ` L ${pts[i].x} ${pts[i].y}`;
+    }
+    return d;
+  }
+
+  function redrawConnections() {
+    linesSVG.innerHTML = '';
+    connections.forEach(conn => {
+      const from = getAnchorPoint(conn.fromBoxId, conn.fromSide);
+      const to = getAnchorPoint(conn.toBoxId, conn.toSide);
+      const dirFrom = sideToDir(conn.fromSide);
+      const dirTo = sideToDir(conn.toSide);
+      const d = buildOrthogonalPath(from, to, dirFrom, dirTo);
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      linesSVG.appendChild(path);
+
+      // Endpoints
+      [from, to].forEach(pt => {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pt.x);
+        circle.setAttribute('cy', pt.y);
+        circle.classList.add('endpoint');
+        linesSVG.appendChild(circle);
+      });
+    });
+  }
+
+  // ── Double-click on canvas to add box ─────────────────────────────
+
+  canvas.addEventListener('dblclick', (e) => {
+    if (e.target !== canvas && e.target !== linesSVG) return;
+    createBox(e.clientX - 80, e.clientY - 50);
+  });
+
+  addBoxBtn.addEventListener('click', () => {
+    const x = 80 + Math.random() * (window.innerWidth - 320);
+    const y = 80 + Math.random() * (window.innerHeight - 280);
+    createBox(x, y);
+  });
+
+  // ── Delete connection on right-click on path ──────────────────────
+
+  linesSVG.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+
+  // ── Seed with two starter boxes ───────────────────────────────────
+
+  createBox(120, 160, 180, 110);
+  createBox(440, 260, 180, 110);
+})();
+</script>
+</body>
+</html>
