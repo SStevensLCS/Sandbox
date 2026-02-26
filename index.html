@@ -208,7 +208,7 @@
 
 <div id="toolbar">
   <button id="add-box">+ box</button>
-  <span>ctrl+k &nbsp;connect</span>
+  <span>ctrl+a &nbsp;connect</span>
 </div>
 
 <div id="mode-indicator">edit</div>
@@ -413,7 +413,7 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'k' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    if (e.key === 'a' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
       // Don't trigger if typing in a content area
       if (document.activeElement && document.activeElement.classList.contains('content')) return;
       e.preventDefault();
