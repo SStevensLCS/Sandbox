@@ -244,6 +244,13 @@
     content.className = 'content';
     content.contentEditable = true;
     content.spellcheck = false;
+    // Prevent contentEditable from capturing shift+click for text selection,
+    // so shift+drag on the box works for moving it.
+    content.addEventListener('mousedown', (e) => {
+      if (e.shiftKey && !connectMode) {
+        e.preventDefault();
+      }
+    });
     el.appendChild(content);
 
     // Resize handles
