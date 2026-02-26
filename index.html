@@ -208,7 +208,7 @@
 
 <div id="toolbar">
   <button id="add-box">+ box</button>
-  <span>shift+k &nbsp;connect</span>
+  <span>ctrl+k &nbsp;connect</span>
 </div>
 
 <div id="mode-indicator">edit</div>
@@ -283,6 +283,22 @@
     let startX, startY, origX, origY, origW, origH;
 
     el.addEventListener('mousedown', (e) => {
+      // Shift+click anywhere on the box = drag (move without resizing)
+      if (e.shiftKey && !connectMode) {
+        dragging = true;
+        el.classList.add('dragging');
+        startX = e.clientX;
+        startY = e.clientY;
+        origX = box.x;
+        origY = box.y;
+        e.preventDefault();
+        e.stopPropagation();
+        if (document.activeElement && document.activeElement.classList.contains('content')) {
+          document.activeElement.blur();
+        }
+        return;
+      }
+
       // Don't drag when clicking content or anchors
       if (e.target.classList.contains('content') || e.target.classList.contains('edge-anchor')) return;
 
@@ -364,7 +380,7 @@
     });
   }
 
-  // ── Connect mode (Shift+K) ───────────────────────────────────────
+  // ── Connect mode (Ctrl+K) ────────────────────────────────────────
 
   function enterConnectMode() {
     connectMode = true;
@@ -390,7 +406,7 @@
   }
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'K' && e.shiftKey && !e.metaKey && !e.ctrlKey) {
+    if (e.key === 'k' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
       // Don't trigger if typing in a content area
       if (document.activeElement && document.activeElement.classList.contains('content')) return;
       e.preventDefault();
